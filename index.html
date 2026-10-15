@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Error Page Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #fafafa; --surface: #fff; --text: #313131; --strong: #171717; --muted: #737373;
+    --border: #e5e5e5; --hover: #f5f5f5; --active: #ededed;
+    --primary: #0051c3; --primary-hover: #003681; --primary-text: #fff; --focus: #0051c3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0a0a; --surface: #141414; --text: #d4d4d4; --strong: #fafafa; --muted: #a3a3a3;
+      --border: #262626; --hover: #1c1c1c; --active: #262626;
+      --primary: #4693ff; --primary-hover: #73adff; --primary-text: #0a0a0a; --focus: #4693ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 14px/21px Inter, ui-sans-serif, system-ui, -apple-system, "Hiragino Sans", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: grid; grid-template-columns: 320px 1fr; height: 100vh;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* 左パネル */
+  .panel { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+  .brand { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; font-weight: 600; color: var(--strong); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .brand svg { flex: none; }
+  .nav { padding: 8px 8px 10px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 2px; }
+  .nav h2 { grid-column: 1 / -1; font-size: 12px; font-weight: 500; color: var(--muted); margin: 8px 8px 2px; }
+  .nav h2:first-child { margin-top: 0; }
+  .nav button {
+    display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; font-size: 13px;
+    border: 0; border-radius: 6px; background: none; text-align: left; cursor: pointer; color: var(--text); font-weight: 500;
+  }
+  .nav button svg { flex: none; }
+  .nav button:hover { background: var(--hover); }
+  .nav button.active { background: var(--active); color: var(--strong); }
+  .panel .foot { margin-top: auto; padding: 10px 12px; font-size: 11px; line-height: 16px; color: var(--muted); border-top: 1px solid var(--border); }
+
+  .section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .section h3 { font-size: 13px; font-weight: 600; color: var(--strong); margin: 0 0 8px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 4px; }
+  .field { margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; line-height: 18px; font-weight: 500; color: var(--strong); margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; height: 32px; padding: 0 10px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  }
+  .field textarea { height: auto; min-height: 72px; padding: 6px 10px; line-height: 19px; resize: vertical; }
+  .field :is(input, select, textarea):focus { outline: 2px solid var(--focus); outline-offset: -1px; border-color: transparent; }
+  .btn {
+    height: 28px; padding: 0 10px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+    font-weight: 500; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  .btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .actions { display: flex; gap: 4px; }
+  .actions .btn { flex: 1; padding: 0 6px; }
+  .row { display: flex; align-items: center; justify-content: space-between; }
+  .link { border: 0; background: none; padding: 0; color: var(--primary); font-size: 12px; font-weight: 500; cursor: pointer; }
+  .link:hover { text-decoration: underline; }
+
+  /* プレビュー */
+  .preview { min-width: 0; display: flex; padding: 12px; }
+  iframe { flex: 1; border: 1px solid var(--border); border-radius: 8px; background: #fff; width: 100%; }
+
+  .toast {
+    position: fixed; left: 336px; bottom: 16px; background: var(--strong); color: var(--surface);
+    padding: 8px 12px; border-radius: 6px; font-weight: 500; opacity: 0; transition: opacity .15s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 800px) {
+    body { grid-template-columns: 1fr; grid-template-rows: auto 70vh; height: auto; }
+    .panel { border-right: 0; border-bottom: 1px solid var(--border); overflow: visible; }
+    .nav { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    .panel .foot { display: none; }
+    .toast { left: 16px; }
+  }
+</style>
+</head>
+<body>
+<aside class="panel">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M2.5 7h15M7.5 10.5l5 4M12.5 10.5l-5 4"/></svg>
+    Error Pages
+  </div>
+  <div class="section nav" id="services"></div>
+  <div class="section">
+    <div class="actions">
+      <button class="btn primary" id="openBtn">開く</button>
+      <button class="btn" id="downloadBtn">保存</button>
+      <button class="btn" id="copyBtn">コピー</button>
+      <button class="btn" id="shareBtn">共有</button>
+    </div>
+  </div>
+  <div class="section" id="presetSection">
+    <h3>プリセット</h3>
+    <div class="presets" id="presets"></div>
+  </div>
+  <div class="section">
+    <h3 class="row">内容<button class="link" id="resetBtn">リセット</button></h3>
+    <form id="form" autocomplete="off"></form>
+  </div>
+  <div class="foot">商標は各社に帰属します。</div>
+</aside>
+<main class="preview">
+  <iframe id="preview" title="preview"></iframe>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="assets.js"></script>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nl = s => esc(s).replace(/\n/g, "<br>");
+const paras = s => String(s ?? "").split(/\n{2,}/).map(p => `<p>${nl(p)}</p>`).join("");
+const A = window.ASSETS;
+
+const TEMPLATES = {
+  google: {
+    name: "Google",
+    fields: [
+      { key: "code", label: "エラーコード", value: "404" },
+      { key: "status", label: "ステータス名 (タブ用)", value: "Not Found" },
+      { key: "lead", label: "灰色の一言", value: "That’s an error." },
+      { key: "path", label: "URLパス", value: "/abcdef" },
+      { key: "message", label: "本文 ({path} がパスに置換)", value: "The requested URL {path} was not found on this server.", type: "textarea" },
+      { key: "tail", label: "締めの一言", value: "That’s all we know." },
+    ],
+    presets: {
+      "500": { code: "500", status: "Internal Server Error", message: "The server encountered an error and could not complete your request.", tail: "Please try again in 30 seconds." },
+      "400": { code: "400", status: "Bad Request", message: "Your client has issued a malformed or illegal request.", tail: "That’s all we know." },
+      "418": { code: "418", status: "I'm a Teapot", lead: "I’m a teapot.", message: "The requested entity body is short and stout.", tail: "Tip me over and pour me out." },
+    },
+    render: v => `<!DOCTYPE html>
+<html lang=en>
+  <meta charset=utf-8>
+  <meta name=viewport content="initial-scale=1, minimum-scale=1, width=device-width">
+  <title>Error ${esc(v.code)} (${esc(v.status)})!!1</title>
+  <style>
+    *{margin:0;padding:0}html,code{font:15px/22px arial,sans-serif}html{background:#fff;color:#222;padding:15px}body{margin:7% auto 0;max-width:390px;min-height:180px;padding:30px 0 15px}* > body{background:url(${A.googleRobot}) 100% 5px no-repeat;padding-right:205px}p{margin:11px 0 22px;overflow:hidden}ins{color:#777;text-decoration:none}a img{border:0}@media screen and (max-width:772px){body{background:none;margin-top:0;max-width:none;padding-right:0}}#logo{background:url(${A.googleLogo}) no-repeat 0% 0%/100% 100%;margin-left:-5px}#logo{display:inline-block;height:54px;width:150px}
+  </style>
+  <a href=//www.google.com/><span id=logo aria-label=Google></span></a>
+  <p><b>${esc(v.code)}.</b> <ins>${esc(v.lead)}</ins>
+  <p>${esc(v.message).replace("{path}", `<code>${esc(v.path)}</code>`)}  <ins>${esc(v.tail)}</ins>
+</html>`,
+  },
+
+  github: {
+    name: "GitHub",
+    fields: [
+      { key: "code", label: "大きな文字 (イラスト左上)", value: "404" },
+      { key: "heading", label: "吹き出しの文言", value: "This is not the web page you are looking for." },
+      { key: "label", label: "検索欄のラベル", value: "Find code, projects, and people on GitHub:" },
+      { key: "title", label: "タブのタイトル", value: "Page not found · GitHub · GitHub" },
+    ],
+    presets: {
+      "500": { code: "500", heading: "Looks like something went wrong!", title: "Server Error · GitHub" },
+      "日本語": { heading: "お探しのページは見つかりませんでした。", label: "GitHub でコード・プロジェクト・ユーザーを検索:" },
+    },
+    render: v => {
+      const code = String(v.code);
+      // 実物のイラストから焼き込みの文字パスだけを除去し、編集可能なテキストを重ねている
+      const overlay = `
+<text x="128" y="96" text-anchor="middle" font-family="'Mona Sans','Mona Sans VF',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="118" font-weight="800" fill="#FDFDFD" stroke="#E4E7EB" stroke-width="1.5" paint-order="stroke"${code.length <= 3 ? ` textLength="227" lengthAdjust="spacingAndGlyphs"` : ""}>${esc(code)}</text>
+<foreignObject x="14" y="108" width="236" height="128"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%;display:flex;align-items:center;font:700 22px/1.25 'Mona Sans','Mona Sans VF',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#33607A;overflow:hidden;word-break:break-word">${esc(v.heading)}</div></foreignObject>`;
+      const illus = A.ghIllus.replace(/<svg /, `<svg class="d-block width-full" style="height:auto;position:relative;top:50%;transform:translateY(-50%);width:100%" role="img" aria-label="${esc(code)} “${esc(v.heading)}”" `).replace(/<\/svg>\s*$/, overlay + "</svg>");
+      const chev = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="opacity:.5;margin-left:2px;vertical-align:-3px"><path d="M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z"/></svg>`;
+      return `<!DOCTYPE html>
+<html lang="en" data-color-mode="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>${esc(v.title)}</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:"Mona Sans","Mona Sans VF",-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1f2328;background:#fff}
+a{color:inherit;text-decoration:none}
+header{background:#000;color:#fff;padding:16px 0;height:72px}
+.hd{max-width:1280px;margin:0 auto;padding:0 32px;display:flex;align-items:center;height:40px;gap:16px}
+.hd nav{display:flex;gap:4px;font-size:16px;font-weight:500;margin-left:8px}.hd nav span{padding:8px;white-space:nowrap}
+.hd .r{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:16px}
+.hd .r .up{border:1px solid #fff;border-radius:6px;padding:3px 8px}
+.hero{position:relative;z-index:0;--not-found-height:clamp(clamp(240px,calc(100vw - 280px),370px),min(56.3vw,calc(100dvh - 390px)),529px)}
+.hero .bg{position:absolute;overflow:hidden;width:100%;top:0;left:0;height:var(--not-found-height)}
+.hero .bg img{position:absolute;inset:0;z-index:1;width:100%;height:100%;max-width:none;object-fit:cover;object-position:center 48%}
+.hero .fg{position:relative;width:100%;margin:0 auto;overflow:hidden;z-index:2;max-width:806px;padding:0 8px;height:var(--not-found-height)}
+.below{max-width:1012px;margin:20px auto 0;padding:0 16px 32px}
+label{display:block;color:#59636e;font-size:16px;margin-bottom:4px}
+.row{display:flex;align-items:center}
+input{flex:auto;font:inherit;font-size:16px;padding:5px 12px;height:32px;border:1px solid #d1d9e0;border-radius:6px;margin-right:8px;color:#1f2328}
+button{font:inherit;font-weight:500;color:#25292e;background:#f6f8fa;border:1px solid #d1d9e0;border-radius:6px;padding:5px 16px;height:32px}
+.links{margin-top:20px;color:#59636e;text-align:center}.links a{color:#59636e}
+@media(max-width:1011px){.hd nav{display:none}}
+</style></head>
+<body>
+<header><div class="hd">
+<svg height="32" viewBox="0 0 24 24" width="32" fill="#fff"><path d="M12 1C5.923 1 1 5.923 1 12c0 4.867 3.149 8.979 7.521 10.436.55.096.756-.233.756-.522 0-.262-.013-1.128-.013-2.049-2.764.509-3.479-.674-3.699-1.292-.124-.317-.66-1.293-1.127-1.554-.385-.207-.936-.715-.014-.729.866-.014 1.485.797 1.691 1.128.99 1.663 2.571 1.196 3.204.907.096-.715.385-1.196.701-1.471-2.448-.275-5.005-1.224-5.005-5.432 0-1.196.426-2.186 1.128-2.956-.111-.275-.496-1.402.11-2.915 0 0 .921-.288 3.024 1.128a10.193 10.193 0 0 1 2.75-.371c.936 0 1.871.123 2.75.371 2.104-1.43 3.025-1.128 3.025-1.128.605 1.513.221 2.64.111 2.915.701.77 1.127 1.747 1.127 2.956 0 4.222-2.571 5.157-5.019 5.432.399.344.743 1.004.743 2.035 0 1.471-.014 2.654-.014 3.025 0 .289.206.632.756.522C19.851 20.979 23 16.854 23 12c0-6.077-4.922-11-11-11Z"/></svg>
+<nav><span>Platform${chev}</span><span>Solutions${chev}</span><span>Resources${chev}</span><span>Open Source${chev}</span><span>Enterprise${chev}</span><span>Pricing</span></nav>
+<div class="r"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/></svg><a href="#">Sign in</a><a class="up" href="#">Sign up</a></div>
+</div></header>
+<main class="font-mktg">
+<div class="hero">
+  <div class="bg"><img alt="" src="${A.ghBg}"></div>
+  <div class="fg">${illus}</div>
+</div>
+<div class="below">
+  <form onsubmit="return false"><label for="not-found-search">${esc(v.label)}</label>
+  <div class="row"><input type="text" id="not-found-search"><button type="submit">Search</button></div></form>
+  <div class="links"><a href="#">Contact Support</a> &mdash; <a href="#">GitHub Status</a> &mdash; <a href="#">@githubstatus</a></div>
+</div>
+</main>
+</body></html>`;
+    },
+  },
+
+  cloudflare: {
+    name: "Cloudflare",
+    fields: [
+      { key: "title", label: "見出し", value: "Web server is down" },
+      { key: "code", label: "エラーコード", value: "521" },
+      { key: "time", label: "日時", value: "" },
+      { key: "broken", label: "どこがエラー?", value: "host", type: "select", options: ["host", "cloudflare", "browser", "none", "all"] },
+      { key: "youLabel", label: "左: 場所", value: "You" },
+      { key: "cfLabel", label: "中央: Cloudflare拠点", value: "Tokyo" },
+      { key: "hostLabel", label: "右: ホスト名", value: "example.com" },
+      { key: "what", label: "What happened? (空行で段落)", value: "The web server is not returning a connection. As a result, the web page is not displaying.", type: "textarea" },
+      { key: "todo", label: "What can I do? (空行で段落)", value: "If you are a visitor of this website:\nPlease try again in a few minutes.\n\nIf you are the owner of this website:\nContact your hosting provider letting them know your web server is not responding.", type: "textarea" },
+      { key: "ray", label: "Ray ID", value: "" },
+      { key: "ip", label: "Your IP (クリックで表示)", value: "203.0.113.42" },
+    ],
+    presets: {
+      "500": { title: "Internal server error", code: "500", broken: "cloudflare", what: "There is an internal server error on Cloudflare's network.", todo: "Please try again in a few minutes." },
+      "502": { title: "Bad gateway", code: "502", broken: "host", what: "The web server reported a bad gateway error.", todo: "Please try again in a few minutes." },
+      "522": { title: "Connection timed out", code: "522", broken: "host", what: "The initial connection between Cloudflare's network and the origin web server timed out. As a result, the web page can not be displayed.", todo: "If you're a visitor of this website:\nPlease try again in a few minutes.\n\nIf you're the owner of this website:\nContact your hosting provider letting them know your web server is not completing requests." },
+      "524": { title: "A timeout occurred", code: "524", broken: "host", what: "The origin web server timed out responding to this request.", todo: "If you're a visitor of this website:\nPlease try again in a few minutes.\n\nIf you're the owner of this website:\nThe connection to the origin web server was made, but the origin web server timed out before responding." },
+      "全滅": { title: "Everything is on fire", code: "999", broken: "all", what: "Literally everything is broken.", todo: "Go outside. Touch grass." },
+    },
+    init: v => {
+      if (!v.time) v.time = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+      if (!v.ray) v.ray = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join("");
+    },
+    render: v => {
+      const items = [
+        ["browser", "browser", v.youLabel, "Browser"],
+        ["cloudflare", "cloud", v.cfLabel, "Cloudflare"],
+        ["host", "server", v.hostLabel, "Host"],
+      ].map(([id, icon, loc, name]) => {
+        const bad = v.broken === "all" || v.broken === id;
+        return `<div id="cf-${id}-status" class="${v.broken === id ? "cf-error-source" : ""} relative w-1/3 md:w-full py-15 md:p-0 md:py-8 md:text-left md:border-solid md:border-0 md:border-b md:border-gray-400 overflow-hidden float-left md:float-none text-center">
+  <div class="relative mb-10 md:m-0">
+    <span class="cf-icon-${icon} block md:hidden h-20 bg-center bg-no-repeat"></span>
+    <span class="cf-icon-${bad ? "error" : "ok"} w-12 h-12 absolute left-1/2 md:left-auto md:right-0 md:top-0 -ml-6 -bottom-4"></span>
+  </div>
+  <span class="md:block w-full truncate">${esc(loc)}</span>
+  <h3 class="md:inline-block mt-3 md:mt-0 text-2xl text-gray-600 font-light leading-1.3"${name === "Cloudflare" ? ' style="color: #2f7bbf;"' : ""}>${name}</h3>
+  <span class="leading-1.3 text-2xl" style="color: ${bad ? "#bd2426" : "#9bca3e"}">${bad ? "Error" : "Working"}</span>
+</div>`;
+      }).join("\n");
+      return `<!DOCTYPE html>
+<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->
+<!--[if IE 7]>    <html class="no-js ie7 oldie" lang="en-US"> <![endif]-->
+<!--[if IE 8]>    <html class="no-js ie8 oldie" lang="en-US"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en-US"> <!--<![endif]-->
+<head>
+<title>${esc(v.hostLabel)} | ${esc(v.code)}: ${esc(v.title)}</title>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>${A.cfCss}</style>
+</head>
+<body>
+<div id="cf-wrapper">
+  <div id="cf-error-details" class="p-0">
+    <header class="mx-auto pt-10 lg:pt-6 lg:px-8 w-240 lg:w-full mb-8">
+      <h1 class="inline-block sm:block sm:mb-2 font-light text-60 lg:text-4xl text-black-dark leading-tight mr-2">
+        <span class="inline-block">${esc(v.title)}</span>
+        <span class="code-label">Error code ${esc(v.code)}</span>
+      </h1>
+      <div>Visit <a href="https://www.cloudflare.com/" target="_blank" rel="noopener noreferrer">cloudflare.com</a> for more information.</div>
+      <div class="mt-3">${esc(v.time)}</div>
+    </header>
+    <div class="my-8 bg-gradient-gray">
+      <div class="w-240 lg:w-full mx-auto">
+        <div class="clearfix md:px-8">
+${items}
+        </div>
+      </div>
+    </div>
+    <div class="w-240 lg:w-full mx-auto mb-8 lg:px-8">
+      <div class="clearfix">
+        <div class="w-1/2 md:w-full float-left pr-6 md:pb-10 md:pr-0 leading-relaxed">
+          <h2 class="text-3xl font-normal leading-1.3 mb-4">What happened?</h2>
+          ${paras(v.what)}
+        </div>
+        <div class="w-1/2 md:w-full float-left leading-relaxed">
+          <h2 class="text-3xl font-normal leading-1.3 mb-4">What can I do?</h2>
+          ${paras(v.todo)}
+        </div>
+      </div>
+    </div>
+    <div class="cf-error-footer cf-wrapper w-240 lg:w-full py-10 sm:py-4 sm:px-8 mx-auto text-center sm:text-left border-solid border-0 border-t border-gray-300">
+      <p class="text-13">
+        <span class="cf-footer-item sm:block sm:mb-1">Cloudflare Ray ID: <strong class="font-semibold">${esc(v.ray)}</strong></span>
+        <span class="cf-footer-separator sm:hidden">&bull;</span>
+        <span id="cf-footer-item-ip" class="cf-footer-item hidden sm:block sm:mb-1">
+          Your IP:
+          <button type="button" id="cf-footer-ip-reveal" class="cf-footer-ip-reveal-btn">Click to reveal</button>
+          <span class="hidden" id="cf-footer-ip">${esc(v.ip)}</span>
+          <span class="cf-footer-separator sm:hidden">&bull;</span>
+        </span>
+        <span class="cf-footer-item sm:block sm:mb-1"><span>Performance &amp; security by</span> <a rel="noopener noreferrer" href="https://www.cloudflare.com/" id="brand_link" target="_blank">Cloudflare</a></span>
+      </p>
+    </div>
+  </div>
+</div>
+<script>(function(){function d(){var b=a.getElementById("cf-footer-item-ip"),c=a.getElementById("cf-footer-ip-reveal");b&&"classList"in b&&(b.classList.remove("hidden"),c.addEventListener("click",function(){c.classList.add("hidden");a.getElementById("cf-footer-ip").classList.remove("hidden")}))}var a=document;document.addEventListener&&a.addEventListener("DOMContentLoaded",d)})();<\/script>
+</body>
+</html>`;
+    },
+  },
+
+  discord: {
+    name: "Discord",
+    fields: [
+      { key: "heading", label: "見出し", value: "Wrong turn?" },
+      { key: "message", label: "本文", value: "You look lost, stranger. You know what helps when you’re lost? A piping hot bowl of noodles. Take a seat, we’re frantically at work here cooking up something good. Oh, you need something to read? These might help you:", type: "textarea" },
+      { key: "links", label: "リンク (カンマ区切り)", value: "Status Page, @Discord, Discord Support" },
+      { key: "title", label: "タブのタイトル", value: "Page Not Found | Discord" },
+    ],
+    presets: {
+      "日本語版": { heading: "道に迷われましたかな？", message: "お困りのようですな、旅人よ。道に迷われたなら、よいものがある。アッツアツの麺ですよ。さあお座りなされ、皆の衆は今必死こいていいものをこさえておりますからな。おお、何かお読みになりたいと？　こちらがお役に立つでしょう。", links: "ステータスページ, @Discord, Discord サポート", title: "ページが見つかりません | Discord" },
+      "BAN": { heading: "You've been bonked", message: "Your account has been disabled for being way too cool. Nelly made you noodles anyway.", links: "Appeal, Cry" },
+    },
+    render: v => `<!DOCTYPE html>
+<html lang="en-US"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(v.title)}</title>
+<style>
+:root{--brand:#5865f2;--not-quite-black:#23272a;--section-spacing:120px;--font-primary:"gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;--font-display-marketing-header:"ABC Ginto Discord Nord","ABC Ginto Nord","gg sans","Arial Black","Helvetica Neue",Helvetica,Arial,sans-serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%}body{font-family:var(--font-primary);font-size:16px;line-height:1.15;color:#000;background:#fff;-webkit-font-smoothing:antialiased}
+a{text-decoration:none}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px;max-width:1260px;margin:0 auto;padding:0 40px}
+.header{grid-column:1/-1;height:80px;display:flex;align-items:center}
+.header nav{display:flex;align-items:center;justify-content:space-between;width:100%}
+.logo{color:var(--not-quite-black);display:flex}
+.navlinks{display:flex;gap:0}.navlinks a{color:var(--not-quite-black);font-weight:700;font-size:16px;margin:10px}
+.btn{background:var(--brand);color:#fff;border-radius:40px;padding:7px 16px;font-size:14px;line-height:24px;font-weight:500;white-space:nowrap}
+.container{grid-column:1/-1;display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px;padding:var(--section-spacing) 0}
+.body{grid-column:span 7;max-width:600px;margin-top:20px;overflow:auto}
+.title{font-family:var(--font-display-marketing-header);color:var(--brand);font-size:44px;font-weight:800;line-height:95%;text-transform:uppercase;margin:0}
+.text{margin-top:20px;font-size:20px;line-height:1.6}
+.links{margin:20px 0 0;padding:0;list-style:none}.links a{font-size:20px;line-height:35px;color:hsl(200,100%,49.4%);transition:.1s}.links a:hover{color:hsl(212,100%,45.3%)}
+.image{grid-column:span 5;max-width:350px;position:relative}.image img{width:350px;max-width:100%}
+.nelly{display:none}
+@media screen and (max-width:1280px){.image{display:none}.body{margin:-40px auto 0;grid-column:1/-1}.title{font-size:28px}.nelly{width:300px;display:block;margin:0 auto 40px;max-width:100%}.text{font-size:18px;line-height:1.4}.navlinks{display:none}}
+@media screen and (max-width:600px){.grid{padding:0 24px}}
+</style></head>
+<body>
+<div class="grid">
+  <div class="header"><nav>
+    <a class="logo" href="#" aria-label="Home">${A.discordLogo}</a>
+    <div class="navlinks"><a href="#">Download</a><a href="#">Nitro</a><a href="#">Discover</a><a href="#">Quests</a><a href="#">Safety</a><a href="#">Support</a><a href="#">Blog</a><a href="#">Developers</a><a href="#">Careers</a></div>
+    <a class="btn" href="#">Log In</a>
+  </nav></div>
+  <div class="container">
+    <div class="body">
+      <img class="nelly" alt="Nelly serving noodles!" src="${A.discordNelly}">
+      <div>
+        <h1 class="title">${esc(v.heading)}</h1>
+        <div class="text">${nl(v.message)}</div>
+        <ul class="links">${String(v.links).split(",").map(s => s.trim()).filter(Boolean).map(s => `<li><a href="#">${esc(s)}</a></li>`).join("")}</ul>
+      </div>
+    </div>
+    <div class="image"><img alt="Nelly serving noodles!" src="${A.discordNelly}"></div>
+  </div>
+</div>
+</body></html>`,
+  },
+
+  microsoft: {
+    name: "Microsoft",
+    fields: [
+      { key: "heading", label: "見出し", value: "We are sorry, the page you requested cannot be found." },
+      { key: "message", label: "本文", value: "The URL may be misspelled or the page you're looking for is no longer available.", type: "textarea" },
+      { key: "title", label: "タブのタイトル", value: "Page cannot be found" },
+    ],
+    presets: {
+      "Windows Update": { heading: "Working on updates. 100% complete.", message: "Don't turn off your computer. This will take a while. A long while.", title: "Updating" },
+      "日本語": { heading: "申し訳ございません。要求されたページは見つかりませんでした。", message: "URL のスペルが間違っているか、お探しのページは削除された可能性があります。", title: "ページが見つかりません" },
+    },
+    render: v => {
+      const cols = {
+        "What's new": ["Surface Pro", "Surface Laptop", "Surface Laptop Ultra", "Surface RTX Spark Dev Box", "Explore Copilot", "Explore Microsoft products", "Windows 11 apps"],
+        "Microsoft Store": ["Account profile", "Download Center", "Microsoft Store support", "Returns", "Order tracking", "Certified Refurbished", "Microsoft Store Promise", "Flexible Payments"],
+        "Education": ["Microsoft in education", "Devices for education", "Microsoft Teams for Education", "Microsoft 365 Education", "How to buy for your school", "Educator training and development", "Deals for students and parents", "AI for education"],
+        "Business": ["Microsoft AI", "Microsoft Security", "Dynamics 365", "Microsoft 365", "Microsoft Power Platform", "Microsoft Teams", "Microsoft Copilot", "Small Business"],
+        "Developer & IT": ["Azure", "Microsoft Developer", "Microsoft Learn", "Support for AI marketplace apps", "Microsoft Tech Community", "Microsoft Marketplace", "Software companies", "Visual Studio"],
+        "Company": ["Careers", "About Microsoft", "Company news", "Privacy at Microsoft", "Investors", "Diversity and inclusion", "Accessibility", "Sustainability"],
+      };
+      return `<!DOCTYPE html>
+<html lang="en-US" dir="ltr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(v.title)}</title>
+<style>
+*{box-sizing:border-box}body{margin:8px;font-family:"Segoe UI",SegoeUI,"Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;background:#fff}
+a{color:inherit;text-decoration:none}
+.uhf-header{height:54px;display:flex;align-items:center;max-width:1600px;margin:0 auto;padding:0 5%;font-size:13px;color:#262626}
+.uhf-header img{height:23px;margin-right:20px}
+.uhf-header nav{display:flex;gap:2px}.uhf-header nav a{padding:8px 10px}
+.uhf-header .r{margin-left:auto;display:flex;align-items:center;gap:16px}
+.uhf-header .sep{width:1px;height:20px;background:#d2d2d2;margin:0 8px 0 4px}
+main.page-not-found{padding:64px 24px;text-align:center;font-family:"Segoe UI",Arial,sans-serif}
+main h1{font-size:36px;font-weight:600;color:#1a1a1a;margin:0}
+main p{font-size:13.5px;line-height:20.25px;color:#505050;margin:16px 0 0}
+.uhf-footer{background:#f2f2f2;margin:48px -8px -8px;padding:30px 5% 16px;font-size:11px;color:#616161}
+.cols{display:grid;grid-template-columns:repeat(6,1fr);gap:24px;max-width:1600px;margin:0 auto}
+.cols h2{font-size:15px;font-weight:600;color:#262626;margin:0 0 10px}
+.cols ul{list-style:none;margin:0;padding:0}.cols li{font-size:11px;line-height:16px;padding:6px 0;color:#616161}
+.bottom{max-width:1600px;margin:30px auto 0;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:center}
+.bottom .lang{display:flex;align-items:center;gap:6px;margin-right:auto}
+@media(max-width:1083px){.uhf-header nav{display:none}.cols{grid-template-columns:repeat(2,1fr)}main h1{font-size:28px}}
+</style></head>
+<body>
+<header class="uhf-header">
+  <a href="#"><img src="${A.msLogo}" alt="Microsoft"></a>
+  <span class="sep" style="margin-left:-8px"></span>
+  <nav><a href="#">Microsoft 365</a><a href="#">Azure</a><a href="#">Copilot</a><a href="#">Windows</a><a href="#">Surface</a><a href="#">XBOX</a><a href="#">Deals</a><a href="#">Small Business</a><a href="#">Support</a><a href="#">More ⌄</a></nav>
+  <div class="r"><a href="#">All Microsoft ⌄</a>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#262626" stroke-width="1.2"><circle cx="9.5" cy="6.5" r="5"/><path d="M6 10 1 15"/></svg>
+    <a href="#" style="display:flex;align-items:center;gap:8px">Sign in <svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="13.5" fill="#fff" stroke="#bbb"/><circle cx="14" cy="11" r="4.5" fill="none" stroke="#262626"/><path d="M6.5 22.5c1.5-3.5 4.3-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#262626"/></svg></a>
+  </div>
+</header>
+<main class="page-not-found">
+  <div>
+    <h1>${esc(v.heading)}</h1>
+    <p>${nl(v.message)}</p>
+  </div>
+</main>
+<footer class="uhf-footer c-uhff uhf-theme--light">
+  <nav class="cols">${Object.entries(cols).map(([h, ls]) => `<div><h2>${esc(h)}</h2><ul>${ls.map(l => `<li><a href="#">${esc(l)}</a></li>`).join("")}</ul></div>`).join("")}</nav>
+  <div class="bottom">
+    <span class="lang"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#616161"><circle cx="10" cy="10" r="8.5"/><ellipse cx="10" cy="10" rx="3.5" ry="8.5"/><path d="M1.5 10h17"/></svg>English (United States)</span>
+    <a href="#">Your Privacy Choices</a><a href="#">Consumer Health Privacy</a><a href="#">Sitemap</a><a href="#">Contact Microsoft</a><a href="#">Privacy</a><a href="#">Terms of use</a><a href="#">Trademarks</a><a href="#">Safety &amp; eco</a><a href="#">Recycling</a><a href="#">About our ads</a><span>&copy; Microsoft ${new Date().getFullYear()}</span>
+  </div>
+</footer>
+</body></html>`;
+    },
+  },
+
+  iis: {
+    name: "IIS",
+    fields: [
+      { key: "title", label: "タブのタイトル", value: "404 - File or directory not found." },
+      { key: "header", label: "灰色のヘッダー", value: "Server Error" },
+      { key: "heading", label: "見出し", value: "404 - File or directory not found." },
+      { key: "message", label: "本文", value: "The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.", type: "textarea" },
+    ],
+    presets: {
+      "403": { title: "403 - Forbidden: Access is denied.", heading: "403 - Forbidden: Access is denied.", message: "You do not have permission to view this directory or page using the credentials that you supplied." },
+      "500": { title: "500 - Internal server error.", heading: "500 - Internal server error.", message: "There is a problem with the resource you are looking for, and it cannot be displayed." },
+    },
+    // go.microsoft.com が返す本物の IIS 404 と同一のマークアップ
+    render: v => `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>${esc(v.title)}</title>
+<style type="text/css">
+<!--
+body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+fieldset{padding:0 15px 10px 15px;}
+h1{font-size:2.4em;margin:0;color:#FFF;}
+h2{font-size:1.7em;margin:0;color:#CC0000;}
+h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;}
+#header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+background-color:#555555;}
+#content{margin:0 0 0 2%;position:relative;}
+.content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+-->
+</style>
+</head>
+<body>
+<div id="header"><h1>${esc(v.header)}</h1></div>
+<div id="content">
+ <div class="content-container"><fieldset>
+  <h2>${esc(v.heading)}</h2>
+  <h3>${nl(v.message)}</h3>
+ </fieldset></div>
+</div>
+</body>
+</html>`,
+  },
+
+  nginx: {
+    name: "nginx",
+    fields: [
+      { key: "code", label: "エラーコード", value: "404" },
+      { key: "status", label: "ステータス名", value: "Not Found" },
+      { key: "server", label: "サーバー名 (server_tokens)", value: "nginx" },
+    ],
+    presets: {
+      "403": { code: "403", status: "Forbidden" },
+      "500": { code: "500", status: "Internal Server Error" },
+      "502": { code: "502", status: "Bad Gateway" },
+      "503": { code: "503", status: "Service Temporarily Unavailable" },
+      "504": { code: "504", status: "Gateway Time-out" },
+      "バージョン付き": { server: "nginx/1.31.3" },
+    },
+    // nginx 組み込みのエラーページ (改行は CRLF)
+    render: v => [
+      "<html>",
+      `<head><title>${esc(v.code)} ${esc(v.status)}</title></head>`,
+      "<body>",
+      `<center><h1>${esc(v.code)} ${esc(v.status)}</h1></center>`,
+      `<hr><center>${esc(v.server)}</center>`,
+      "</body>",
+      "</html>",
+      "",
+    ].join("\r\n"),
+  },
+
+  apache: {
+    name: "Apache",
+    fields: [
+      { key: "status", label: "見出し", value: "Not Found" },
+      { key: "code", label: "コード (タブ用)", value: "404" },
+      { key: "message", label: "本文", value: "The requested URL was not found on this server.", type: "textarea" },
+      { key: "server", label: "署名 (空欄で非表示)", value: "Apache/2.4.62 (Unix) Server at localhost Port 80" },
+    ],
+    presets: {
+      "403": { status: "Forbidden", code: "403", message: "You don't have permission to access this resource." },
+      "500": { status: "Internal Server Error", code: "500", message: "The server encountered an internal error or\nmisconfiguration and was unable to complete\nyour request." },
+      "503": { status: "Service Unavailable", code: "503", message: "The server is temporarily unable to service your\nrequest due to maintenance downtime or capacity\nproblems. Please try again later." },
+    },
+    // Apache httpd 2.4 組み込みのエラーページ (ServerSignature Off なら署名なし)
+    render: v => `<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<html><head>
+<title>${esc(v.code)} ${esc(v.status)}</title>
+</head><body>
+<h1>${esc(v.status)}</h1>
+<p>${esc(v.message)}</p>
+${v.server ? `<hr>\n<address>${esc(v.server)}</address>\n` : ""}</body></html>
+`,
+  },
+};
+
+const $ = id => document.getElementById(id);
+let current = "google";
+let values = {};
+
+function defaults(key) {
+  const t = TEMPLATES[key];
+  const v = Object.fromEntries(t.fields.map(f => [f.key, f.value]));
+  t.init?.(v);
+  return v;
+}
+
+function selectService(key, initial) {
+  current = key;
+  values = { ...defaults(key), ...(initial || {}) };
+  document.querySelectorAll("#services button").forEach(b => b.classList.toggle("active", b.dataset.key === key));
+  buildForm();
+  buildPresets();
+  render();
+}
+
+function buildForm() {
+  const t = TEMPLATES[current];
+  $("form").innerHTML = t.fields.map(f => {
+    const id = "f_" + f.key;
+    let input;
+    if (f.type === "textarea") input = `<textarea id="${id}" data-key="${f.key}">${esc(values[f.key])}</textarea>`;
+    else if (f.type === "select") input = `<select id="${id}" data-key="${f.key}">${f.options.map(o => `<option${o === values[f.key] ? " selected" : ""}>${o}</option>`).join("")}</select>`;
+    else input = `<input id="${id}" data-key="${f.key}" value="${esc(values[f.key])}">`;
+    return `<div class="field"><label for="${id}">${esc(f.label)}</label>${input}</div>`;
+  }).join("");
+}
+
+function buildPresets() {
+  const p = TEMPLATES[current].presets || {};
+  $("presets").innerHTML = Object.keys(p).map(k => `<button class="btn" data-preset="${esc(k)}">${esc(k)}</button>`).join("");
+  $("presetSection").hidden = !Object.keys(p).length;
+}
+
+function html() { return TEMPLATES[current].render(values); }
+
+let raf;
+function render() {
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(() => {
+    const out = html();
+    $("preview").srcdoc = out;
+  });
+}
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1400);
+}
+
+// --- events ---
+// ナビ用ロゴ (Simple Icons, CC0。Google は gstatic 配布の公式グラデーション G、Cloudflare はダッシュボードの2色ロゴ、Microsoft は公式の4色スクエア)
+const LOGOS = {
+  google: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 48 48"><defs><clipPath id="gg-clip"><path d="M46.6 20H24v9.02h12.94c-.58 2.96-2.26 5.48-4.77 7.18-2.15 1.44-4.92 2.29-8.16 2.29-6.26 0-11.57-4.22-13.47-9.91-.48-1.45-.76-2.98-.76-4.58s.27-3.14.76-4.59C12.43 13.72 17.74 9.5 24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78C6.51 42.62 14.62 48 24 48c6.47 0 11.92-2.13 15.88-5.8h.01c4.51-4.18 7.09-10.36 7.09-17.65 0-1.57-.15-3.09-.38-4.55z" fill="none"/></clipPath></defs><g clip-path="url(#gg-clip)"><image width="48" height="48" xlink:href="data:image/png;base64,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"/></g></svg>`,
+  github: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>`,
+  cloudflare: `<svg width="16" height="16" viewBox="40 60 360 152"><path fill="#FF9911" d="M328.6,125.6c-0.8,0-1.5,0.6-1.8,1.4l-4.8,16.7c-2.1,7.2-1.3,13.8,2.2,18.7c3.2,4.5,8.6,7.1,15.1,7.4l26.2,1.6c0.8,0,1.5,0.4,1.9,1c0.4,0.6,0.5,1.5,0.3,2.2c-0.4,1.2-1.6,2.1-2.9,2.2l-27.3,1.6c-14.8,0.7-30.7,12.6-36.3,27.2l-2,5.1c-0.4,1,0.3,2,1.4,2h93.8c1.1,0,2.1-0.7,2.4-1.8c1.6-5.8,2.5-11.9,2.5-18.2c0-37-30.2-67.2-67.3-67.2C330.9,125.5,329.7,125.5,328.6,125.6z"/><path fill="#FF5E1F" d="M292.8,204.4c2.1-7.2,1.3-13.8-2.2-18.7c-3.2-4.5-8.6-7.1-15.1-7.4l-123.1-1.6c-0.8,0-1.5-0.4-1.9-1s-0.5-1.4-0.3-2.2c0.4-1.2,1.6-2.1,2.9-2.2l124.2-1.6c14.7-0.7,30.7-12.6,36.3-27.2l7.1-18.5c0.3-0.8,0.4-1.6,0.2-2.4c-8-36.2-40.3-63.2-78.9-63.2c-35.6,0-65.8,23-76.6,54.9c-7-5.2-15.9-8-25.5-7.1c-17.1,1.7-30.8,15.4-32.5,32.5c-0.4,4.4-0.1,8.7,0.9,12.7c-27.9,0.8-50.2,23.6-50.2,51.7c0,2.5,0.2,5,0.5,7.5c0.2,1.2,1.2,2.1,2.4,2.1h227.2c1.3,0,2.5-0.9,2.9-2.2L292.8,204.4z"/></svg>`,
+  discord: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#5865F2"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>`,
+  nginx: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#009639"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm6 16.59c0 .705-.646 1.29-1.529 1.29-.631 0-1.351-.255-1.801-.81l-6-7.141v6.66c0 .721-.57 1.29-1.274 1.29H7.32c-.721 0-1.29-.6-1.29-1.29V7.41c0-.705.63-1.29 1.5-1.29.646 0 1.38.255 1.83.81l5.97 7.141V7.41c0-.721.6-1.29 1.29-1.29h.075c.72 0 1.29.6 1.29 1.29v9.18H18z"/></svg>`,
+  apache: `<svg width="16" height="16" viewBox="0 0 24 24" fill="#D22128"><path d="M17.805 2.197v.066h.156v.44h.072v-.44h.156v-.066zm.9 0l-.175.353-.172-.353h-.087v.506h.067V2.3l.172.35h.045l.172-.35v.404h.066v-.506zm-4.257 1c-.204.31-.424.66-.66 1.06l-.04.062a44.457 44.457 0 00-1.265 2.29c-.187.36-.38.742-.577 1.146l2.267-.25c.66-.302.955-.578 1.242-.976a15.5 15.5 0 00.23-.342c.23-.363.46-.763.663-1.16.197-.386.37-.767.505-1.11.083-.22.15-.422.198-.6.042-.158.074-.307.1-.45-.884.15-1.965.295-2.668.33zM11.894 7.78l-.077.16c-.078.16-.157.32-.236.488-.086.18-.172.364-.26.552l-.132.287a75.265 75.265 0 00-1.427 3.3c-.163.397-.327.807-.493 1.23-.15.38-.297.765-.45 1.164l-.02.06c-.15.396-.3.802-.453 1.22l-.01.027.72-.08a.213.213 0 01-.042-.006c.863-.106 2.01-.75 2.75-1.547.342-.367.652-.8.94-1.306.213-.377.413-.795.604-1.258.168-.405.328-.843.48-1.318-.196.105-.423.18-.673.235a2.184 2.184 0 01-.273.046c.806-.31 1.314-.905 1.683-1.64a2.816 2.816 0 01-.968.428c-.06.012-.116.022-.174.03l-.043.006h.002c.278-.118.514-.248.718-.403a2.571 2.571 0 00.637-.698l.063-.104.077-.154a8.107 8.107 0 00.367-.85l.03-.088a3.04 3.04 0 00.123-.463.733.733 0 01-.094.065c-.243.145-.66.277-.996.34l.663-.074-.664.073h-.017l-.1.017c.006-.003.01-.006.017-.008l-2.265.25-.013.022zM8.27 16.45c-.117.323-.236.654-.355.992l-.005.015c-.016.046-.032.094-.05.142-.08.227-.15.432-.31.9.264.12.475.435.675.793a1.44 1.44 0 00-.466-.99c1.293.06 2.41-.27 2.99-1.217.05-.084.096-.173.14-.268-.26.333-.59.474-1.2.44 0 0-.004 0-.005.002l.004-.002c.9-.404 1.354-.79 1.754-1.433.094-.153.186-.32.28-.503-.788.81-1.702 1.04-2.664.865l-.72.078a6.43 6.43 0 00-.067.183zM15.42.112c-.376.222-1 .85-1.748 1.763l.686 1.294c.48-.687.97-1.307 1.462-1.836l.058-.062c-.02.02-.04.04-.057.062-.16.176-.644.74-1.375 1.863.703-.035 1.784-.18 2.666-.33.262-1.47-.258-2.142-.258-2.142s-.66-1.07-1.436-.61zm-3.084 6.402a40.253 40.253 0 011.306-2.26l.04-.064c.224-.352.45-.693.677-1.02l-.685-1.293-.157.192c-.197.245-.403.51-.613.79a39.853 39.853 0 00-2.016 2.97l-.022.038.893 1.763c.19-.378.38-.752.575-1.118zm-3.73 8.32c.158-.406.319-.81.483-1.225.156-.394.32-.79.484-1.19a91.133 91.133 0 011.6-3.604l.205-.424c.12-.243.237-.485.36-.724a.125.125 0 01.02-.04l-.895-1.763-.044.07c-.207.34-.414.687-.617 1.042a38.056 38.056 0 00-1.092 2.04l-.094.193a24.573 24.573 0 00-1.258 3.087 18.492 18.492 0 00-.52 1.997l.896 1.77c.117-.317.24-.638.364-.963zm-1.376-.476a13.38 13.38 0 00-.234 1.692c0 .02-.004.04-.005.06-.28-.45-1.03-.888-1.026-.884.537.778.944 1.55 1.005 2.31-.29.058-.684-.027-1.14-.195.475.436.83.556.97.588-.434.03-.89.328-1.346.67.668-.27 1.21-.38 1.596-.29-.61 1.74-1.23 3.655-1.843 5.69a.538.538 0 00.364-.354c.11-.368.84-2.786 1.978-5.965l.097-.27.028-.078c.12-.332.246-.672.374-1.02l.09-.237v-.004L7.24 14.3c-.003.02-.01.04-.012.06z"/></svg>`,
+  microsoft: `<svg width="16" height="16" viewBox="0 0 23 23"><path fill="#F25022" d="M1 1h10v10H1z"/><path fill="#7FBA00" d="M12 1h10v10H12z"/><path fill="#00A4EF" d="M1 12h10v10H1z"/><path fill="#FFB900" d="M12 12h10v10H12z"/></svg>`,
+  iis: `<svg width="16" height="16" viewBox="0 0 23 23"><path fill="#F25022" d="M1 1h10v10H1z"/><path fill="#7FBA00" d="M12 1h10v10H12z"/><path fill="#00A4EF" d="M1 12h10v10H1z"/><path fill="#FFB900" d="M12 12h10v10H12z"/></svg>`,
+};
+const NAV = [
+  ["サービス", ["google", "github", "cloudflare", "discord", "microsoft"]],
+  ["Webサーバー", ["iis", "nginx", "apache"]],
+];
+$("services").innerHTML = NAV.map(([title, keys]) =>
+  `<h2>${title}</h2>` + keys.map(k => `<button data-key="${k}">${LOGOS[k]}${esc(TEMPLATES[k].name)}</button>`).join("")).join("");
+$("services").addEventListener("click", e => { const k = e.target.closest("button")?.dataset.key; if (k) selectService(k); });
+$("form").addEventListener("input", e => { const k = e.target.dataset.key; if (k) { values[k] = e.target.value; render(); } });
+$("presets").addEventListener("click", e => {
+  const k = e.target.dataset.preset; if (!k) return;
+  Object.assign(values, TEMPLATES[current].presets[k]); buildForm(); render();
+});
+$("openBtn").onclick = () => {
+  const url = URL.createObjectURL(new Blob([html()], { type: "text/html" }));
+  window.open(url, "_blank");
+};
+$("downloadBtn").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html()], { type: "text/html" }));
+  a.download = `${current}-${values.code || "error"}.html`;
+  a.click();
+};
+$("copyBtn").onclick = async () => { await navigator.clipboard.writeText(html()); toast("HTMLをコピーしました"); };
+$("resetBtn").onclick = () => selectService(current);
+$("shareBtn").onclick = async () => {
+  const data = btoa(unescape(encodeURIComponent(JSON.stringify({ s: current, v: values }))));
+  const url = location.href.split("#")[0] + "#" + data;
+  history.replaceState(null, "", "#" + data);
+  await navigator.clipboard.writeText(url); toast("共有URLをコピーしました");
+};
+
+// URLハッシュから状態を復元
+(() => {
+  try {
+    const { s, v } = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
+    if (TEMPLATES[s]) return selectService(s, v);
+  } catch {}
+  selectService("google");
+})();
+</script>
+</body>
+</html>
